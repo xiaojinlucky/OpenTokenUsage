@@ -3,7 +3,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ChangelogDialog } from "./changelog-dialog";
 import { Button } from "@/components/ui/button";
 import { t } from "@/lib/i18n";
-import { BuyMeACoffeeButton } from "@/components/support-dialog";
 
 interface AboutDialogProps {
   version: string;
@@ -119,8 +118,6 @@ export function AboutDialog({ version, onClose }: AboutDialogProps) {
             <ExternalLink href="https://github.com/PowerUserZ/OpenTokenUsage">GitHub</ExternalLink>
           </p>
         </div>
-
-        <BuyMeACoffeeButton />
       </div>
     </div>
   );

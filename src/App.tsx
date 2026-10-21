@@ -365,7 +365,6 @@ function App() {
         debugLevel: t("tray.debugLevel"),
         copyLogPath: t("tray.copyLogPath"),
         about: t("tray.about"),
-        support: t("support.buyMeACoffee"),
         quit: t("tray.quit"),
       },
     }).catch((error) => console.error("Failed to translate tray menu:", error))

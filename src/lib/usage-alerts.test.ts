@@ -33,6 +33,19 @@ describe("collectUsageAlerts", () => {
     expect(collect([line(85, 2 * HOUR)], alert!.keys)).toEqual([])
   })
 
+  it("uses the remaining share for a named count line in left mode", () => {
+    const fixed: MetricLine = {
+      type: "progress",
+      label: "Meta",
+      used: 80,
+      limit: 100,
+      format: { kind: "count", suffix: "分", primaryCaption: "临期", secondaryCaption: "可用" },
+      resetsAt: new Date(NOW + HOUR).toISOString(),
+    }
+    expect(collect([fixed], [], undefined, [80, 95], "left")[0]?.title).toBe("Claude: Meta at 20% left")
+    expect(collect([fixed], [], undefined, [80, 95], "used")[0]?.title).toBe("Claude: Meta at 80% used")
+  })
+
   it("uses the selected direction in notifications without changing thresholds", () => {
     const [left] = collect([line(82, 2 * HOUR)], [], undefined, [80, 95], "left")
     const [used] = collect([line(82, 2 * HOUR)], [], undefined, [80, 95], "used")

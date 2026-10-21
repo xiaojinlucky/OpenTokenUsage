@@ -15,7 +15,7 @@ import { REFRESH_COOLDOWN_MS, type DisplayMode, type ResetTimerDisplayMode, type
 import type { ManifestLine, MetricLine, PluginLink } from "@/lib/plugin-types"
 import { groupLinesByType } from "@/lib/group-lines-by-type"
 import { clamp01, formatCountNumber, formatFixedPrecisionNumber } from "@/lib/utils"
-import { getDisplayedUsage } from "@/lib/usage-display"
+import { fixedCountCaptions, getDisplayedUsage } from "@/lib/usage-display"
 import { calculateDeficit, calculatePaceStatus, type PaceStatus } from "@/lib/pace-status"
 import { buildPaceDetailText, formatDeficitText, formatRunsOutText, getPaceStatusText } from "@/lib/pace-tooltip"
 import { formatResetAbsoluteLabel, formatResetRelativeLabel, formatResetTooltipText } from "@/lib/reset-tooltip"
@@ -429,15 +429,30 @@ function MetricLineRenderer({
     const periodDurationMs = line.periodDurationMs
     const hasPaceContext = Number.isFinite(resetsAtMs) && Number.isFinite(periodDurationMs)
     const hasTimeMarkerContext = hasPaceContext && periodDurationMs! > 0
-    const { amount: shownAmount, fraction: shownFraction } = getDisplayedUsage(line.used, line.limit, displayMode)
-    const percent = Math.round(shownFraction * 10000) / 100
+    const fixed = fixedCountCaptions(line.format)
+    const expiringFraction = line.limit > 0 ? clamp01(line.used / line.limit) : 0
+    const shown = fixed
+      ? {
+          amount: Math.max(0, line.used),
+          fraction: expiringFraction,
+        }
+      : getDisplayedUsage(line.used, line.limit, displayMode)
+    const shownAmount = shown.amount
+    // Same side as the other cards: purple grows from the left, gray track stays on the right.
+    // For 临期/可用 the purple is the share that still has time, so the gray on the right is 临期.
+    const barFraction = fixed && line.limit > 0 ? 1 - expiringFraction : shown.fraction
+    const percent = Math.round(barFraction * 10000) / 100
     const amountText =
       line.format.kind === "percent"
         ? `${Math.round(shownAmount)}%`
         : line.format.kind === "dollars"
           ? `$${formatFixedPrecisionNumber(shownAmount)}`
           : `${formatCountNumber(shownAmount)} ${line.format.suffix}`
-    const primaryText = displayMode === "left" ? t("card.valueLeft", { value: amountText }) : amountText
+    const primaryText = fixed
+      ? `${fixed.primary} ${amountText}`
+      : displayMode === "left"
+        ? t("card.valueLeft", { value: amountText })
+        : amountText
 
     const resetLabel = line.resetsAt
       ? resetTimerDisplayMode === "absolute"
@@ -453,13 +468,14 @@ function MetricLineRenderer({
         })
       : null
 
-    const secondaryText =
-      resetLabel ??
-      (line.format.kind === "percent"
-        ? t("card.percentCap", { value: line.limit })
-        : line.format.kind === "dollars"
-          ? t("card.amountLimit", { value: `$${formatFixedPrecisionNumber(line.limit)}` })
-          : `${formatCountNumber(line.limit)} ${line.format.suffix}`)
+    const secondaryText = fixed && line.format.kind === "count"
+      ? `${fixed.secondary} ${formatCountNumber(line.limit)} ${line.format.suffix}`
+      : (resetLabel ??
+        (line.format.kind === "percent"
+          ? t("card.percentCap", { value: line.limit })
+          : line.format.kind === "dollars"
+            ? t("card.amountLimit", { value: `$${formatFixedPrecisionNumber(line.limit)}` })
+            : `${formatCountNumber(line.limit)} ${line.format.suffix}`))
 
     // Calculate pace status if we have reset time and period duration
     const paceResult = hasPaceContext

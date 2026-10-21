@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "grok-bot",
+  "name": "Grok Bot",
+  "version": "0.1.0",
+  "entry": "plugin.js",
+  "icon": "icon.svg",
+  "brandColor": "#111111",
+  "lines": [
+    { "type": "progress", "label": "每周", "scope": "overview", "primaryOrder": 1 },
+    { "type": "text", "label": "每周", "scope": "overview" }
+  ]
+}

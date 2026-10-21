@@ -12,7 +12,23 @@ const PROBE_TIMEOUT_SECS: u64 = 30;
 pub enum ProgressFormat {
     Percent,
     Dollars,
-    Count { suffix: String },
+    Count {
+        suffix: String,
+        #[serde(
+            default,
+            rename = "primaryCaption",
+            alias = "primary_caption",
+            skip_serializing_if = "Option::is_none"
+        )]
+        primary_caption: Option<String>,
+        #[serde(
+            default,
+            rename = "secondaryCaption",
+            alias = "secondary_caption",
+            skip_serializing_if = "Option::is_none"
+        )]
+        secondary_caption: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -445,7 +461,28 @@ fn parse_lines(result: &Object) -> Result<Vec<MetricLine>, String> {
                             )));
                             continue;
                         }
-                        ProgressFormat::Count { suffix }
+                        let caption = |name: &str| -> Option<String> {
+                            match format_obj.get::<_, Value>(name) {
+                                Ok(v) => v.as_string().and_then(|s| {
+                                    let text = s.to_string().unwrap_or_default().trim().to_string();
+                                    if text.is_empty() { None } else { Some(text) }
+                                }),
+                                Err(_) => None,
+                            }
+                        };
+                        let primary_caption = caption("primaryCaption");
+                        let secondary_caption = caption("secondaryCaption");
+                        let (primary_caption, secondary_caption) =
+                            if primary_caption.is_some() && secondary_caption.is_some() {
+                                (primary_caption, secondary_caption)
+                            } else {
+                                (None, None)
+                            };
+                        ProgressFormat::Count {
+                            suffix,
+                            primary_caption,
+                            secondary_caption,
+                        }
                     }
                     _ => {
                         out.push(error_line(format!(

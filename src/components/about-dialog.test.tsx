@@ -1,10 +1,8 @@
-import { readFileSync } from "node:fs"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import { AboutDialog } from "@/components/about-dialog"
-import { SUPPORT_URL } from "@/lib/support"
 
 const openerState = vi.hoisted(() => ({
   openUrlMock: vi.fn(() => Promise.resolve()),
@@ -38,14 +36,6 @@ describe("AboutDialog", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "PowerUserZ" }))
     expect(openerState.openUrlMock).toHaveBeenCalledWith("https://github.com/PowerUserZ")
-  })
-
-  it("opens the Buy Me a Coffee page, the same one the tray menu opens", async () => {
-    render(<AboutDialog version="1.2.3" onClose={() => {}} />)
-    await userEvent.click(screen.getByRole("button", { name: "Buy me a coffee" }))
-    expect(openerState.openUrlMock).toHaveBeenCalledWith(SUPPORT_URL)
-    expect(screen.getByText("buymeacoffee.com/poweruserz")).toBeInTheDocument()
-    expect(readFileSync("src-tauri/src/tray.rs", "utf8")).toContain(`const SUPPORT_URL: &str = "${SUPPORT_URL}";`)
   })
 
   it("closes on Escape", async () => {

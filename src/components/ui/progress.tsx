@@ -46,6 +46,7 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
         {...props}
       >
         <div
+          data-slot="progress-indicator"
           className="h-full transition-all bg-primary"
           style={{ width: `${clamped}%`, ...indicatorStyle }}
         />

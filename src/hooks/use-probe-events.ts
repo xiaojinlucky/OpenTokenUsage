@@ -28,6 +28,10 @@ export function useProbeEvents({ onResult, onBatchComplete }: UseProbeEventsOpti
   const listenersReadyRef = useRef<Promise<void> | null>(null)
   const listenersReadyResolveRef = useRef<(() => void) | null>(null)
   const listenersReadyErrorRef = useRef<Error | null>(null)
+  const onResultRef = useRef(onResult)
+  const onBatchCompleteRef = useRef(onBatchComplete)
+  onResultRef.current = onResult
+  onBatchCompleteRef.current = onBatchComplete
 
   useEffect(() => {
     let cancelled = false
@@ -40,11 +44,13 @@ export function useProbeEvents({ onResult, onBatchComplete }: UseProbeEventsOpti
 
     const setup = async () => {
       try {
+        // Subscribe once. Re-subscribing when the callback identity changes drops
+        // results that arrive in the gap, and a fast local read loses that race.
         // Apply every result, even from a batch this page doesn't know: the host skips a plugin
         // that is still probing from an earlier batch (e.g. before a webview reload), and that
         // probe's result is the only one that will clear the plugin's loading state.
         const resultUnlisten = await listen<ProbeResult>("probe:result", (event) => {
-          onResult(event.payload.output)
+          onResultRef.current(event.payload.output)
         })
 
         if (cancelled) {
@@ -57,7 +63,7 @@ export function useProbeEvents({ onResult, onBatchComplete }: UseProbeEventsOpti
           "probe:batch-complete",
           (event) => {
             if (activeBatchIds.current.delete(event.payload.batchId)) {
-              onBatchComplete()
+              onBatchCompleteRef.current()
             }
           }
         )
@@ -90,7 +96,7 @@ export function useProbeEvents({ onResult, onBatchComplete }: UseProbeEventsOpti
       listenersReadyRef.current = null
       listenersReadyResolveRef.current = null
     }
-  }, [onBatchComplete, onResult])
+  }, [])
 
   const startBatch = useCallback(async (pluginIds?: string[]) => {
     // Wait for listeners to be ready before starting the batch

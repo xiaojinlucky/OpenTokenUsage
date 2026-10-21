@@ -130,6 +130,43 @@ describe("getTrayPrimaryBars", () => {
     expect(bars).toEqual([{ id: "a", fraction: 1, label: "Plan usage" }])
   })
 
+  it("fills named count lines with the share that still has time", () => {
+    const bars = getTrayPrimaryBars({
+      displayMode: "left",
+      pluginsMeta: [
+        {
+          id: "workbuddy",
+          name: "WorkBuddy",
+          iconUrl: "",
+          primaryCandidates: ["Meta"],
+          lines: [],
+        },
+      ],
+      pluginSettings: { order: ["workbuddy"], disabled: [] },
+      pluginStates: {
+        workbuddy: {
+          data: {
+            providerId: "workbuddy",
+            displayName: "WorkBuddy",
+            iconUrl: "",
+            lines: [
+              {
+                type: "progress",
+                label: "Meta",
+                used: 0,
+                limit: 5121,
+                format: { kind: "count", suffix: "分", primaryCaption: "临期", secondaryCaption: "可用" },
+              },
+            ],
+          },
+          loading: false,
+          error: null,
+        },
+      },
+    })
+    expect(bars).toEqual([{ id: "workbuddy", fraction: 1, label: "Meta" }])
+  })
+
   it("does not compute fraction when limit is 0", () => {
     const bars = getTrayPrimaryBars({
       pluginsMeta: [

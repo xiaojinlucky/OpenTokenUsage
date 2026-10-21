@@ -1,6 +1,12 @@
 (function () {
-  const STATE_DB =
-    "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+  // %APPDATA%\Cursor is a junction onto another drive. The tilde path is kept as a
+  // fallback; OpenTokenUsage rejects it when the real folder leaves the home directory.
+  const STATE_DB_CANDIDATES = [
+    "F:/AIAgentData/Data/AppData/Roaming/Cursor/User/globalStorage/state.vscdb",
+    "~/AppData/Roaming/Cursor/User/globalStorage/state.vscdb",
+    "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+  ]
+  let STATE_DB = STATE_DB_CANDIDATES[0]
   const KEYCHAIN_ACCESS_TOKEN_SERVICE = "cursor-access-token"
   const KEYCHAIN_REFRESH_TOKEN_SERVICE = "cursor-refresh-token"
   const BASE_URL = "https://api2.cursor.sh"
@@ -8,30 +14,30 @@
   const PLAN_URL = BASE_URL + "/aiserver.v1.DashboardService/GetPlanInfo"
   const REFRESH_URL = BASE_URL + "/oauth/token"
   const CREDITS_URL = BASE_URL + "/aiserver.v1.DashboardService/GetCreditGrantsBalance"
-  const GROK_BOT_USAGE_URL = BASE_URL + "/aiserver.v1.DashboardService/GetSandUsageStatus"
   const REST_USAGE_URL = "https://cursor.com/api/usage"
   const USAGE_SUMMARY_URL = "https://cursor.com/api/usage-summary"
   const BILLING_PERIOD_MS = 30 * 24 * 60 * 60 * 1000
-  const WEEK_MS = 7 * 24 * 60 * 60 * 1000
   const STRIPE_URL = "https://cursor.com/api/auth/stripe"
   const CLIENT_ID = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB"
   const REFRESH_BUFFER_MS = 5 * 60 * 1000 // refresh 5 minutes before expiration
   const LOGIN_HINT = "Sign in via Cursor app or run `agent login`."
 
   function readStateValue(ctx, key) {
-    try {
-      const sql =
-        "SELECT value FROM ItemTable WHERE key = '" + key + "' LIMIT 1;"
-      const json = ctx.host.sqlite.query(STATE_DB, sql)
-      const rows = ctx.util.tryParseJson(json)
-      if (!Array.isArray(rows)) {
-        throw new Error("sqlite returned invalid json")
+    const sql =
+      "SELECT value FROM ItemTable WHERE key = '" + key + "' LIMIT 1;"
+    for (let i = 0; i < STATE_DB_CANDIDATES.length; i++) {
+      const db = STATE_DB_CANDIDATES[i]
+      try {
+        const json = ctx.host.sqlite.query(db, sql)
+        const rows = ctx.util.tryParseJson(json)
+        if (!Array.isArray(rows)) continue
+        if (rows.length > 0 && rows[0].value) {
+          STATE_DB = db
+          return rows[0].value
+        }
+      } catch (e) {
+        ctx.host.log.warn("sqlite read failed for " + key + ": " + String(e))
       }
-      if (rows.length > 0 && rows[0].value) {
-        return rows[0].value
-      }
-    } catch (e) {
-      ctx.host.log.warn("sqlite read failed for " + key + ": " + String(e))
     }
     return null
   }
@@ -395,49 +401,6 @@
     return ctx.line.text({ label: "On-demand", value: "$" + String(ctx.fmt.dollars(usedCents)) + " spent" })
   }
 
-  // Grok Bot ("Sand") has its own weekly allowance. Pooled enterprise accounts and accounts
-  // without an included allowance have no personal meter; that is normal, not an error.
-  function fetchGrokBotLine(ctx, accessToken) {
-    var resp
-    try {
-      resp = connectPost(ctx, GROK_BOT_USAGE_URL, accessToken)
-    } catch (e) {
-      ctx.host.log.warn("Grok Bot usage fetch failed: " + String(e))
-      return null
-    }
-    if (resp.status < 200 || resp.status >= 300) {
-      ctx.host.log.warn("Grok Bot usage returned status=" + resp.status)
-      return null
-    }
-    var usage = ctx.util.tryParseJson(resp.bodyText)
-    if (!usage || typeof usage !== "object") {
-      ctx.host.log.warn("Grok Bot usage response invalid")
-      return null
-    }
-    if (usage.usesPooledEnterpriseAllowance === true ||
-      usage.hasNonZeroIncludedLimit === false ||
-      usage.includedLimitZero === true) {
-      return null
-    }
-    var percent = readNumber(usage.usagePercent)
-    if (percent === null || percent < 0) {
-      if (usage.usagePercent !== undefined || usage.hasNonZeroIncludedLimit === true || usage.hasAvailableUsage === true) {
-        ctx.host.log.warn("Grok Bot usage response contained invalid usage metadata")
-      }
-      return null
-    }
-    var resetMs = readDateMs(ctx, usage.nextResetTimestampUtc)
-    var startMs = readDateMs(ctx, usage.currentPeriodStart)
-    return ctx.line.progress({
-      label: "Grok Bot usage",
-      used: Math.min(100, percent),
-      limit: 100,
-      format: { kind: "percent" },
-      resetsAt: resetMs !== null ? ctx.util.toIso(resetMs) : null,
-      periodDurationMs: startMs !== null && resetMs !== null && resetMs > startMs ? resetMs - startMs : WEEK_MS,
-    })
-  }
-
   // Enterprise/team dashboards split data across two REST payloads: /api/usage has the included
   // request allowance; /api/usage-summary has percentages, user-scoped on-demand spend and exact
   // billing-cycle bounds. Neither is enough alone.
@@ -476,8 +439,6 @@
     var onDemand = onDemandBucketLine(ctx, cycle, individual.onDemand) ||
       onDemandBucketLine(ctx, cycle, summary && summary.teamUsage && summary.teamUsage.onDemand)
 
-    var grokBot = fetchGrokBotLine(ctx, accessToken)
-    if (grokBot) lines.push(grokBot)
     if (onDemand) lines.push(onDemand)
 
     var plan = null
@@ -791,9 +752,6 @@
         periodDurationMs: billingPeriodMs
       }))
     }
-
-    const grokBot = fetchGrokBotLine(ctx, accessToken)
-    if (grokBot) lines.push(grokBot)
 
     // On-demand (if available) - not a primary candidate
     if (su) {

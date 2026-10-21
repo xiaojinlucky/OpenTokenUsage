@@ -15,6 +15,7 @@ export function useProbeState({ onProbeResult }: UseProbeStateArgs) {
   }, [pluginStates])
 
   const manualRefreshIdsRef = useRef<Set<string>>(new Set())
+  const loadingSinceRef = useRef<Record<string, number>>({})
 
   const updatePluginStates = useCallback(
     (
@@ -41,8 +42,12 @@ export function useProbeState({ onProbeResult }: UseProbeStateArgs) {
   const setLoadingForPlugins = useCallback((ids: string[]) => {
     updatePluginStates((prev) => {
       const next = { ...prev }
+      const startedAt = Date.now()
       for (const id of ids) {
         const existing = prev[id]
+        if (loadingSinceRef.current[id] == null) {
+          loadingSinceRef.current[id] = startedAt
+        }
         next[id] = {
           data: existing?.data ?? null,
           loading: true,
@@ -60,6 +65,7 @@ export function useProbeState({ onProbeResult }: UseProbeStateArgs) {
       const next = { ...prev }
       for (const id of ids) {
         const existing = prev[id]
+        delete loadingSinceRef.current[id]
         next[id] = {
           data: existing?.data ?? null,
           loading: false,
@@ -74,6 +80,8 @@ export function useProbeState({ onProbeResult }: UseProbeStateArgs) {
 
   const handleProbeResult = useCallback(
     (output: PluginOutput) => {
+      if (!output?.providerId || !Array.isArray(output.lines)) return
+      delete loadingSinceRef.current[output.providerId]
       const errorMessage = getErrorMessage(output)
       const isManual = manualRefreshIdsRef.current.has(output.providerId)
       if (isManual) {
@@ -106,6 +114,7 @@ export function useProbeState({ onProbeResult }: UseProbeStateArgs) {
     pluginStates,
     pluginStatesRef,
     manualRefreshIdsRef,
+    loadingSinceRef,
     setLoadingForPlugins,
     setErrorForPlugins,
     handleProbeResult,

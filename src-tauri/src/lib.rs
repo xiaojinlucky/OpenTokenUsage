@@ -318,6 +318,25 @@ async fn start_probe_batch(
                     break;
                 };
 
+                // Grok Bot reads the access token Cursor refreshes and writes back.
+                // Probing it while that refresh is still in flight reports a failed read
+                // even though Cursor's own line gets the new token. Wait out that overlap.
+                if plugin.manifest.id == "grok-bot" {
+                    let cursor_busy = probes_in_flight()
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .contains("cursor");
+                    if cursor_busy {
+                        let mut queue = queue
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        queue.push_back((plugin, in_flight));
+                        drop(queue);
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        continue;
+                    }
+                }
+
                 let plugin_id = plugin.manifest.id.clone();
                 let app_state = tauri::Manager::state::<Mutex<AppState>>(&handle);
                 // A WSL card whose distro is stopped shows its last data: probing would start the distro.

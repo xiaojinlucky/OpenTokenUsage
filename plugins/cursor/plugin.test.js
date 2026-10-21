@@ -2001,9 +2001,7 @@ describe("cursor plugin", () => {
     expect(() => plugin.probe(ctx)).toThrow("Enterprise usage data unavailable")
   })
 
-  // Upstream 65324c6c + 0b7653c5: Grok Bot weekly allowance from GetSandUsageStatus,
-  // ordered after Auto/API usage.
-  it("adds Grok Bot usage after Auto/API usage", async () => {
+  it("leaves Grok Bot usage to its own card", async () => {
     const ctx = makeCtx()
     const accessToken = makeJwt({ sub: "google-oauth2|user_abc123", exp: 9999999999 })
     ctx.host.sqlite.query.mockReturnValue(JSON.stringify([{ value: accessToken }]))
@@ -2019,17 +2017,6 @@ describe("cursor plugin", () => {
           }),
         }
       }
-      if (url.includes("GetSandUsageStatus")) {
-        return {
-          status: 200,
-          bodyText: JSON.stringify({
-            usagePercent: 37.5,
-            currentPeriodStart: "2026-08-20T00:00:00Z",
-            nextResetTimestampUtc: "2026-08-27T00:00:00Z",
-            hasNonZeroIncludedLimit: true,
-          }),
-        }
-      }
       return { status: 200, bodyText: "{}" }
     })
 
@@ -2037,57 +2024,8 @@ describe("cursor plugin", () => {
     const result = plugin.probe(ctx)
 
     expect(result.lines.map((line) => line.label)).toEqual([
-      "Total usage", "Auto usage", "API usage", "Grok Bot usage", "On-demand",
+      "Total usage", "Auto usage", "API usage", "On-demand",
     ])
-    expect(result.lines[3]).toEqual({
-      type: "progress",
-      label: "Grok Bot usage",
-      used: 37.5,
-      limit: 100,
-      format: { kind: "percent" },
-      resetsAt: "2026-08-27T00:00:00.000Z",
-      periodDurationMs: 7 * 24 * 60 * 60 * 1000,
-    })
-    const grokRequest = ctx.host.http.request.mock.calls.find((call) => String(call[0].url).includes("GetSandUsageStatus"))[0]
-    expect(grokRequest.method).toBe("POST")
-    expect(grokRequest.headers.Authorization).toBe("Bearer " + accessToken)
-  })
-
-  it.each([
-    [{ usagePercent: 42, usesPooledEnterpriseAllowance: true }, false],
-    [{ usagePercent: 0, hasNonZeroIncludedLimit: false }, false],
-    [{ includedLimitZero: true }, false],
-    [{}, false],
-    [{ usagePercent: true, hasNonZeroIncludedLimit: true }, true],
-    [{ usagePercent: -1 }, true],
-  ])("hides Grok Bot usage for ineligible or invalid payload %j (warns=%s)", async (grokBot, warns) => {
-    const ctx = makeCtx()
-    mockEnterpriseFallback(ctx, { requestUsage: { "gpt-4": { numRequests: 1, maxRequestUsage: 10 } }, grokBot })
-
-    const plugin = await loadPlugin()
-    const result = plugin.probe(ctx)
-
-    expect(result.lines.find((line) => line.label === "Grok Bot usage")).toBeUndefined()
-    expect(result.lines.find((line) => line.label === "Requests")).toBeTruthy()
-    const warned = ctx.host.log.warn.mock.calls.some((call) => String(call[0]).includes("Grok Bot usage response contained invalid usage metadata"))
-    expect(warned).toBe(warns)
-  })
-
-  it("clamps Grok Bot overage and keeps primary usage when Grok Bot request fails", async () => {
-    const ctx = makeCtx()
-    mockEnterpriseFallback(ctx, { requestUsage: { "gpt-4": { numRequests: 1, maxRequestUsage: 10 } }, grokBot: { usagePercent: 125 } })
-    const plugin = await loadPlugin()
-    expect(plugin.probe(ctx).lines.find((line) => line.label === "Grok Bot usage").used).toBe(100)
-
-    const failing = makeCtx()
-    mockEnterpriseFallback(failing, { requestUsage: { "gpt-4": { numRequests: 1, maxRequestUsage: 10 } } })
-    const baseImpl = failing.host.http.request.getMockImplementation()
-    failing.host.http.request.mockImplementation((opts) =>
-      String(opts.url).includes("GetSandUsageStatus") ? { status: 503, bodyText: "" } : baseImpl(opts)
-    )
-    const result = plugin.probe(failing)
-    expect(result.lines.find((line) => line.label === "Requests")).toBeTruthy()
-    expect(result.lines.find((line) => line.label === "Grok Bot usage")).toBeUndefined()
-    expect(failing.host.log.warn).toHaveBeenCalledWith("Grok Bot usage returned status=503")
+    expect(ctx.host.http.request.mock.calls.some((call) => String(call[0].url).includes("GetSandUsageStatus"))).toBe(false)
   })
 })

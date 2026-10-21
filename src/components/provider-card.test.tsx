@@ -1010,4 +1010,46 @@ describe("groupLinesByType", () => {
     expect(groups[2].kind).toBe("other")
     expect(groups[2].lines).toHaveLength(1)
   })
+
+  it("paints time still left from the left and leaves expiring credits on the right", () => {
+    const { container, rerender } = render(
+      <ProviderCard
+        name="WorkBuddy"
+        displayMode="left"
+        lines={[
+          {
+            type: "progress",
+            label: "Meta师兄",
+            used: 2323,
+            limit: 7021,
+            format: { kind: "count", suffix: "分", primaryCaption: "临期", secondaryCaption: "可用" },
+          },
+        ]}
+      />
+    )
+    expect(screen.getByText("临期 2,323 分")).toBeInTheDocument()
+    expect(screen.getByText("可用 7,021 分")).toBeInTheDocument()
+    const indicator = container.querySelector<HTMLElement>('[data-slot="progress-indicator"]')
+    expect(indicator?.style.width).toBe("66.91%")
+    expect(indicator).toHaveClass("bg-primary")
+    expect(indicator).not.toHaveClass("ml-auto")
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "66.91")
+
+    rerender(
+      <ProviderCard
+        name="WorkBuddy"
+        displayMode="left"
+        lines={[
+          {
+            type: "progress",
+            label: "Jin",
+            used: 0,
+            limit: 5121,
+            format: { kind: "count", suffix: "分", primaryCaption: "临期", secondaryCaption: "可用" },
+          },
+        ]}
+      />
+    )
+    expect(container.querySelector<HTMLElement>('[data-slot="progress-indicator"]')?.style.width).toBe("100%")
+  })
 })

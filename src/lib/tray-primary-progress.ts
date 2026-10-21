@@ -1,7 +1,7 @@
 import type { PluginMeta, PluginOutput } from "@/lib/plugin-types"
 import type { PluginSettings } from "@/lib/settings"
 import { DEFAULT_DISPLAY_MODE, type DisplayMode } from "@/lib/settings"
-import { getDisplayedUsage } from "@/lib/usage-display"
+import { fixedCountCaptions, getDisplayedUsage } from "@/lib/usage-display"
 
 type PluginState = {
   data: PluginOutput | null
@@ -103,7 +103,11 @@ export function getTrayPrimaryBars(args: {
             isProgressLine(line) && line.label === metricLabel
         )
         if (metricLine && metricLine.limit > 0) {
-          fraction = getDisplayedUsage(metricLine.used, metricLine.limit, displayMode).fraction
+          // Named pairs such as 临期/可用 keep the card's meaning: the filled share
+          // is the part that still has time, not the expiring share.
+          fraction = fixedCountCaptions(metricLine.format)
+            ? Math.min(1, Math.max(0, 1 - metricLine.used / metricLine.limit))
+            : getDisplayedUsage(metricLine.used, metricLine.limit, displayMode).fraction
         }
       }
     }

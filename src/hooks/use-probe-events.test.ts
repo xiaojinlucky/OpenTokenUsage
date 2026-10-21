@@ -137,6 +137,28 @@ describe("useProbeEvents", () => {
 
   // Regression: after a webview reload the host skips a plugin still probing from the old batch;
   // its result arrives under that unknown batch id and must still clear the loading state.
+  it("keeps one subscription when the result callback changes", async () => {
+    invokeMock.mockImplementation(async (_cmd: string, args: any) => ({
+      batchId: args.batchId,
+      pluginIds: args.pluginIds ?? [],
+    }))
+    const first = vi.fn()
+    const second = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ onResult }) => useProbeEvents({ onResult, onBatchComplete: vi.fn() }),
+      { initialProps: { onResult: first } }
+    )
+
+    await act(() => result.current.startBatch(["a"]))
+    rerender({ onResult: second })
+    const output = { providerId: "a", displayName: "A", lines: [], iconUrl: "" } satisfies PluginOutput
+    listeners.get("probe:result")?.({ payload: { batchId: "later", output } })
+
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledWith(output)
+    expect(listenMock).toHaveBeenCalledTimes(2)
+  })
+
   it("applies results from an unknown batch but ignores its completion", async () => {
     invokeMock.mockImplementation(async (_cmd: string, args: any) => ({
       batchId: args.batchId,

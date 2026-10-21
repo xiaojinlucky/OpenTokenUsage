@@ -107,6 +107,7 @@ export function AppContent({
       <OverviewPage
         plugins={displayPlugins}
         onRetryPlugin={onRetryPlugin}
+        onReorder={onReorder}
         displayMode={displayMode}
         resetTimerDisplayMode={resetTimerDisplayMode}
         timeFormatMode={timeFormatMode}

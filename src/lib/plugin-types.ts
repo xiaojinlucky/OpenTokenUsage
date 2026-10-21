@@ -1,7 +1,7 @@
 export type ProgressFormat =
   | { kind: "percent" }
   | { kind: "dollars" }
-  | { kind: "count"; suffix: string }
+  | { kind: "count"; suffix: string; primaryCaption?: string; secondaryCaption?: string }
 
 export type BarChartPoint = {
   label: string

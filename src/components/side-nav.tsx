@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { CircleHelp, Settings } from "lucide-react"
 import { openUrl } from "@tauri-apps/plugin-opener"
 import { invoke } from "@tauri-apps/api/core"
@@ -23,8 +23,6 @@ import { cn } from "@/lib/utils"
 import { getRelativeLuminance } from "@/lib/color"
 import { useDarkMode } from "@/hooks/use-dark-mode"
 import { t } from "@/lib/i18n"
-import { BmcCup } from "@/components/bmc-cup"
-import { SupportDialog } from "@/components/support-dialog"
 
 type ActiveView = "home" | "settings" | string
 
@@ -145,12 +143,10 @@ export function SideNav({
   onReorder,
 }: SideNavProps) {
   const isDark = useDarkMode()
-  const [showSupport, setShowSupport] = useState(false)
-  const closeSupport = useCallback(() => setShowSupport(false), [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 300, tolerance: 5 },
+      activationConstraint: { distance: 8 },
     })
   )
 
@@ -248,16 +244,6 @@ export function SideNav({
           </SortableContext>
         </DndContext>
       </div>
-
-      {/* Support: opens a short "why a coffee helps" dialog, not the site */}
-      <NavButton
-        isActive={showSupport}
-        onClick={() => setShowSupport(true)}
-        aria-label={t("support.navLabel")}
-      >
-        <BmcCup className="h-5 w-auto" />
-      </NavButton>
-      {showSupport && <SupportDialog onClose={closeSupport} />}
 
       {/* Help */}
       <NavButton

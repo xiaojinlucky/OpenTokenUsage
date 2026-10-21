@@ -1,5 +1,11 @@
 (function () {
-  const AUTH_PATH = "~/.grok/auth.json"
+  // ~/.grok is a junction onto another drive. The tilde path is kept as a fallback;
+  // OpenTokenUsage rejects it when the real folder leaves the home directory.
+  const AUTH_PATHS = [
+    "F:/AIAgentData/Data/.grok/auth.json",
+    "~/.grok/auth.json",
+  ]
+  let AUTH_PATH = AUTH_PATHS[0]
   // The weekly shared-pool data: the billing endpoint with `?format=credits` returns the
   // `GetGrokCreditsConfig` message as JSON — the exact call the Grok CLI itself makes.
   const BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
@@ -13,12 +19,24 @@
   const LOGIN_HINT = "Grok auth expired. Run `grok login` again."
 
   function readJson(ctx, path) {
-    if (!ctx.host.fs.exists(path)) return null
     try {
-      return ctx.util.tryParseJson(ctx.host.fs.readText(path))
+      const parsed = ctx.util.tryParseJson(ctx.host.fs.readText(path))
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
+      return parsed
     } catch {
       return null
     }
+  }
+
+  function readAuthFile(ctx) {
+    for (let i = 0; i < AUTH_PATHS.length; i++) {
+      const parsed = readJson(ctx, AUTH_PATHS[i])
+      if (parsed && Object.keys(parsed).length > 0) {
+        AUTH_PATH = AUTH_PATHS[i]
+        return parsed
+      }
+    }
+    return null
   }
 
   function entryExpiresAtMs(ctx, entry) {
@@ -148,7 +166,7 @@
   }
 
   function loadAuth(ctx) {
-    const auth = readJson(ctx, AUTH_PATH)
+    const auth = readAuthFile(ctx)
     if (!auth || typeof auth !== "object") {
       throw "Grok not logged in. Run `grok login`."
     }
@@ -357,7 +375,7 @@
   // Who is signed in, for the WSL same-account check (wsl.rs): the account's user id. Reads the
   // file only; unlike loadAuth it never refreshes a token.
   function accountKey(ctx) {
-    const auth = readJson(ctx, AUTH_PATH)
+    const auth = readAuthFile(ctx)
     if (!auth || typeof auth !== "object") return null
     for (const entryKey of Object.keys(auth)) {
       const entry = auth[entryKey]
